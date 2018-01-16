@@ -11,6 +11,7 @@
 #include <pro.h>
 #include <idp.hpp>
 #include <graph.hpp>
+#include <loader.hpp>
 
 class bitsett : public std::vector<bool>
 {
@@ -130,11 +131,7 @@ public:
 //--------------------------------------------------------------------------
 int init(void)
 {
-    // GUI version?
-    if (callui(ui_get_hwnd).vptr == NULL && !is_idaq())
-        return PLUGIN_SKIP;
-
-    return PLUGIN_OK;
+    return is_idaq() ? PLUGIN_OK : PLUGIN_SKIP;
 }
 
 //--------------------------------------------------------------------------
@@ -145,12 +142,12 @@ void term(void)
 
 bool search_comment(ea_t ea, const char *searchString)
 {
-    char cmt[1024];
+    qstring cmt;
 
-    if (get_cmt(ea, false, cmt, sizeof(cmt)) == -1)
+    if (get_cmt(&cmt, ea, false) == -1)
         return false;
 
-    if (strstr(cmt, searchString) != NULL)
+    if (strstr(cmt.c_str(), searchString) != NULL)
         return true;
 
     return false;
@@ -187,44 +184,44 @@ void add_nodes(mutable_graph_t *graph, DominatorInfo *d, intvec_t &nodes, int st
 
 qstring getGroupText(mutable_graph_t *g, int selectedNode)
 {
-    char textBuffer[2048];
-    char nodeComment[2048];
+    qstring textBuffer;
+    qstring nodeComment;
 
     intvec_t node_set;
     node_set.push_back(selectedNode);
 
     ea_t nodeAddr = g->calc_group_ea(node_set);
 
-    if (get_cmt(nodeAddr, false, nodeComment, sizeof(nodeComment)) == -1
-        && get_cmt(nodeAddr, true, nodeComment, sizeof(nodeComment)) == -1)
+    if (get_cmt(&nodeComment, nodeAddr, false) == -1
+        && get_cmt(&nodeComment, nodeAddr, true) == -1)
     {
-        if (asktext(sizeof(textBuffer), textBuffer, "group text", "Please enter group text") == NULL)
+        if (!ask_text(&textBuffer, 2048, "group text", "Please enter group text"))
             return qstring("");
     }
     else
     {
-        if (asktext(sizeof(textBuffer), textBuffer, nodeComment, "Please enter group text") == NULL)
+        if (!ask_text(&textBuffer, 2048, nodeComment.c_str(), "Please enter group text"))
             return qstring("");
     }
 
-    return qstring(textBuffer);
+    return textBuffer;
 }
 
 //--------------------------------------------------------------------------
-void run(int /*arg*/)
+bool run(size_t /*arg*/)
 {
     graph_viewer_t *graphViewer = get_current_viewer(); //get_graph_viewer(form);
     if (graphViewer == NULL)
     {
         msg("graphViewer is null");
-        return;
+        return false;
     }
 
     mutable_graph_t *graph = get_viewer_graph(graphViewer);
     if (graph == NULL)
     {
         msg("graph is null");
-        return;
+        return false;
     }
 
     DominatorInfo dominatorInfo(graph);
@@ -236,7 +233,7 @@ void run(int /*arg*/)
     if (startNode == -1)
     {
         warning("Please select a node to start grouping from.");
-        return;
+        return false;
     }
 
     qstring groupText = getGroupText(graph, startNode);
@@ -244,7 +241,7 @@ void run(int /*arg*/)
     if (groupText.length() == 0)
     {
         msg("Cancelling as no group text was entered.\n");
-        return;
+        return false;
     }
     intvec_t nodeSet;
 
@@ -262,6 +259,7 @@ void run(int /*arg*/)
         viewer_create_groups(graphViewer, &out_groups, groups);
     }
 
+    return true;
 }
 
 //--------------------------------------------------------------------------
